@@ -1,0 +1,11 @@
+## Interface: 120001
+## Title: DK Grip Tracker
+## Notes: Death Grip charge cooldown tracker with icon overlay.
+## Title-zhCN: DK死亡之握修复
+## Notes-zhCN: 死亡之握充能冷却监控，图标显示充能次数和冷却计时。
+## Author: DK-姜世离（燃烧之刃）
+## Version: 1.0.0
+## SavedVariables: DKGripTrackerDB
+## IconTexture: Interface\Icons\Spell_DeathKnight_Strangulate
+
+DKGripTracker.lua

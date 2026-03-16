@@ -1,0 +1,776 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>DK Grip Tracker - 效果预览</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #1a1a2e;
+    color: #e0e0e0;
+    font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+    min-height: 100vh;
+    padding: 30px;
+  }
+  h1 {
+    text-align: center;
+    color: #c41f3b;
+    font-size: 28px;
+    margin-bottom: 8px;
+    text-shadow: 0 0 10px rgba(196,31,59,0.5);
+  }
+  .subtitle {
+    text-align: center;
+    color: #888;
+    font-size: 14px;
+    margin-bottom: 40px;
+  }
+
+  /* 场景容器 */
+  .scenarios {
+    display: flex;
+    flex-direction: column;
+    gap: 50px;
+    max-width: 1100px;
+    margin: 0 auto;
+  }
+  .scenario {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 12px;
+    padding: 28px;
+  }
+  .scenario-title {
+    font-size: 18px;
+    font-weight: bold;
+    margin-bottom: 6px;
+    color: #ffd100;
+  }
+  .scenario-desc {
+    font-size: 13px;
+    color: #999;
+    margin-bottom: 20px;
+    line-height: 1.6;
+  }
+
+  /* 时间轴 */
+  .timeline {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    overflow-x: auto;
+    padding: 10px 0;
+  }
+  .state-box {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-width: 130px;
+    flex-shrink: 0;
+  }
+  .state-label {
+    font-size: 11px;
+    color: #aaa;
+    margin-bottom: 8px;
+    text-align: center;
+    height: 30px;
+    display: flex;
+    align-items: center;
+  }
+
+  /* WoW 图标 */
+  .wow-icon {
+    width: 56px;
+    height: 56px;
+    position: relative;
+    border: 2px solid #444;
+    border-radius: 4px;
+    overflow: hidden;
+    background: #2a1a3a;
+  }
+  .wow-icon.bright { border-color: #666; }
+  .wow-icon.dim { border-color: #333; }
+
+  /* 图标底图 */
+  .icon-bg {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 28px;
+    position: relative;
+  }
+  .icon-bg.bright {
+    background: linear-gradient(135deg, #6b2fa0, #9b3dc7, #7b2fb0);
+  }
+  .icon-bg.dim {
+    background: linear-gradient(135deg, #3a2a44, #4a3a54, #3a2a44);
+    filter: saturate(0.2);
+  }
+  .icon-bg .grip-symbol {
+    font-size: 26px;
+    text-shadow: 0 0 8px rgba(200,100,255,0.6);
+  }
+  .icon-bg.dim .grip-symbol {
+    text-shadow: none;
+    opacity: 0.5;
+  }
+
+  /* 冷却遮罩（扇形） */
+  .cd-overlay {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    pointer-events: none;
+  }
+
+  /* 用 conic-gradient 模拟冷却扇形 */
+  .cd-sweep {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    border-radius: 2px;
+  }
+
+  /* 暗色遮罩 (0 充能) */
+  .dim-mask {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    background: rgba(0,0,0,0.5);
+    border-radius: 2px;
+  }
+
+  /* 中央冷却文字 */
+  .cd-text {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 20px;
+    font-weight: bold;
+    text-shadow: 0 0 4px rgba(0,0,0,0.9), 1px 1px 2px #000;
+    z-index: 5;
+  }
+  .cd-text.yellow { color: #ffdd22; }
+  .cd-text.red { color: #ff4444; }
+
+  /* 右下角充能数字 */
+  .charge-num {
+    position: absolute;
+    bottom: 2px;
+    right: 4px;
+    font-size: 15px;
+    font-weight: bold;
+    text-shadow: 0 0 3px rgba(0,0,0,0.9), 1px 1px 2px #000;
+    z-index: 6;
+  }
+  .charge-num.white { color: #fff; }
+  .charge-num.red { color: #ff4444; }
+
+  /* 箭头 */
+  .arrow {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 50px;
+    flex-shrink: 0;
+    color: #666;
+    font-size: 20px;
+    padding-top: 30px;
+  }
+  .arrow-label {
+    font-size: 10px;
+    color: #888;
+    text-align: center;
+    margin-top: 2px;
+    white-space: nowrap;
+  }
+  .arrow-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-width: 70px;
+    padding-top: 30px;
+  }
+
+  /* 底部信息 */
+  .state-info {
+    margin-top: 8px;
+    text-align: center;
+  }
+  .state-info .charge-label {
+    font-size: 12px;
+    color: #8aff8a;
+    font-weight: bold;
+  }
+  .state-info .charge-label.warn { color: #ffaa33; }
+  .state-info .charge-label.danger { color: #ff4444; }
+  .state-info .detail {
+    font-size: 10px;
+    color: #777;
+    margin-top: 2px;
+  }
+
+  /* 动画演示区 */
+  .demo-section {
+    margin-top: 50px;
+    text-align: center;
+  }
+  .demo-title {
+    font-size: 20px;
+    color: #ffd100;
+    margin-bottom: 20px;
+  }
+  .demo-container {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 15px;
+  }
+  .demo-icon {
+    width: 72px;
+    height: 72px;
+    position: relative;
+    border: 2px solid #666;
+    border-radius: 5px;
+    overflow: hidden;
+    background: #2a1a3a;
+    cursor: pointer;
+    transition: border-color 0.2s;
+  }
+  .demo-icon:hover { border-color: #c41f3b; }
+  .demo-icon .icon-bg {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, #6b2fa0, #9b3dc7, #7b2fb0);
+    transition: filter 0.3s;
+  }
+  .demo-icon .grip-symbol { font-size: 34px; text-shadow: 0 0 10px rgba(200,100,255,0.6); }
+  .demo-icon .cd-text {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 26px;
+    font-weight: bold;
+    text-shadow: 0 0 4px rgba(0,0,0,0.9), 1px 1px 2px #000;
+    z-index: 5;
+    color: #ffdd22;
+  }
+  .demo-icon .charge-num {
+    position: absolute;
+    bottom: 2px; right: 5px;
+    font-size: 18px;
+    font-weight: bold;
+    text-shadow: 0 0 3px rgba(0,0,0,0.9), 1px 1px 2px #000;
+    z-index: 6;
+    color: #fff;
+  }
+  .demo-icon .cd-sweep-anim {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    border-radius: 3px;
+    pointer-events: none;
+  }
+  .demo-icon .dim-mask {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    background: rgba(0,0,0,0.5);
+    border-radius: 3px;
+    display: none;
+  }
+  .demo-status {
+    font-size: 14px;
+    color: #ccc;
+    min-height: 20px;
+  }
+  .demo-log {
+    margin-top: 10px;
+    font-size: 12px;
+    color: #888;
+    max-height: 120px;
+    overflow-y: auto;
+    text-align: left;
+    background: rgba(0,0,0,0.3);
+    padding: 10px;
+    border-radius: 6px;
+    width: 360px;
+  }
+  .demo-log div { margin-bottom: 3px; }
+  .demo-log .event { color: #8aff8a; }
+  .demo-log .restore { color: #ffdd22; }
+
+  .btn {
+    padding: 8px 20px;
+    background: #c41f3b;
+    border: none;
+    color: #fff;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    margin: 5px;
+  }
+  .btn:hover { background: #e02550; }
+  .btn.secondary { background: #444; }
+  .btn.secondary:hover { background: #555; }
+
+  .legend {
+    margin-top: 40px;
+    padding: 20px;
+    background: rgba(255,255,255,0.03);
+    border-radius: 8px;
+    border: 1px solid rgba(255,255,255,0.06);
+    max-width: 600px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+  .legend h3 { color: #ffd100; font-size: 15px; margin-bottom: 10px; }
+  .legend ul { list-style: none; padding: 0; }
+  .legend li { font-size: 13px; color: #aaa; margin-bottom: 6px; padding-left: 16px; position: relative; }
+  .legend li::before { content: "•"; position: absolute; left: 0; color: #c41f3b; }
+</style>
+</head>
+<body>
+
+<h1>⚔️ DK Grip Tracker — 效果预览</h1>
+<p class="subtitle">死亡之握充能冷却监控插件 · 各场景状态展示</p>
+
+<div class="scenarios">
+
+  <!-- ==================== 场景1 ==================== -->
+  <div class="scenario">
+    <div class="scenario-title">📌 场景一：释放 1 次死亡之握，等待恢复</div>
+    <div class="scenario-desc">初始满充能 → 释放 1 次 → 25秒后充能恢复满</div>
+    <div class="timeline">
+
+      <!-- 状态1: 初始 -->
+      <div class="state-box">
+        <div class="state-label">初始状态</div>
+        <div class="wow-icon bright">
+          <div class="icon-bg bright"><span class="grip-symbol">🤜</span></div>
+          <span class="charge-num white">2</span>
+        </div>
+        <div class="state-info">
+          <div class="charge-label">充能 2/2</div>
+          <div class="detail">图标明亮，可用</div>
+        </div>
+      </div>
+
+      <div class="arrow-container">
+        <div style="font-size:22px;color:#8aff8a;">→</div>
+        <div class="arrow-label">释放成功</div>
+      </div>
+
+      <!-- 状态2: 用了1次 -->
+      <div class="state-box">
+        <div class="state-label">刚释放</div>
+        <div class="wow-icon bright">
+          <div class="icon-bg bright"><span class="grip-symbol">🤜</span></div>
+          <div class="cd-sweep" style="background: conic-gradient(rgba(0,0,0,0.65) 0deg, rgba(0,0,0,0.65) 5deg, transparent 5deg); "></div>
+          <span class="cd-text yellow">25</span>
+          <span class="charge-num white">1</span>
+        </div>
+        <div class="state-info">
+          <div class="charge-label warn">充能 1/2</div>
+          <div class="detail">冷却开始 25秒</div>
+        </div>
+      </div>
+
+      <div class="arrow-container">
+        <div style="font-size:22px;color:#666;">→</div>
+        <div class="arrow-label">10秒后</div>
+      </div>
+
+      <!-- 状态3: 冷却中 -->
+      <div class="state-box">
+        <div class="state-label">冷却中</div>
+        <div class="wow-icon bright">
+          <div class="icon-bg bright"><span class="grip-symbol">🤜</span></div>
+          <div class="cd-sweep" style="background: conic-gradient(rgba(0,0,0,0.65) 0deg, rgba(0,0,0,0.65) 144deg, transparent 144deg);"></div>
+          <span class="cd-text yellow">15</span>
+          <span class="charge-num white">1</span>
+        </div>
+        <div class="state-info">
+          <div class="charge-label warn">充能 1/2</div>
+          <div class="detail">图标仍然亮（还有1层可用）</div>
+        </div>
+      </div>
+
+      <div class="arrow-container">
+        <div style="font-size:22px;color:#666;">→</div>
+        <div class="arrow-label">25秒到</div>
+      </div>
+
+      <!-- 状态4: 恢复 -->
+      <div class="state-box">
+        <div class="state-label">恢复满</div>
+        <div class="wow-icon bright">
+          <div class="icon-bg bright"><span class="grip-symbol">🤜</span></div>
+          <span class="charge-num white">2</span>
+        </div>
+        <div class="state-info">
+          <div class="charge-label">充能 2/2</div>
+          <div class="detail">完全恢复，无冷却</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ==================== 场景2 ==================== -->
+  <div class="scenario">
+    <div class="scenario-title">📌 场景二：连续释放 2 次（充能耗尽）</div>
+    <div class="scenario-desc">释放 2 次 → 充能为 0，图标变暗 → 第一层 25 秒恢复后才开始第二层计时 → 再等 25 秒全部恢复</div>
+    <div class="timeline">
+
+      <!-- 状态1 -->
+      <div class="state-box">
+        <div class="state-label">满充能</div>
+        <div class="wow-icon bright">
+          <div class="icon-bg bright"><span class="grip-symbol">🤜</span></div>
+          <span class="charge-num white">2</span>
+        </div>
+        <div class="state-info">
+          <div class="charge-label">充能 2/2</div>
+        </div>
+      </div>
+
+      <div class="arrow-container">
+        <div style="font-size:22px;color:#8aff8a;">→</div>
+        <div class="arrow-label">释放×1</div>
+      </div>
+
+      <!-- 状态2: 1层 -->
+      <div class="state-box">
+        <div class="state-label">用了1次</div>
+        <div class="wow-icon bright">
+          <div class="icon-bg bright"><span class="grip-symbol">🤜</span></div>
+          <div class="cd-sweep" style="background: conic-gradient(rgba(0,0,0,0.65) 0deg, rgba(0,0,0,0.65) 36deg, transparent 36deg);"></div>
+          <span class="cd-text yellow">23</span>
+          <span class="charge-num white">1</span>
+        </div>
+        <div class="state-info">
+          <div class="charge-label warn">充能 1/2</div>
+          <div class="detail">图标亮，还能用</div>
+        </div>
+      </div>
+
+      <div class="arrow-container">
+        <div style="font-size:22px;color:#ff4444;">→</div>
+        <div class="arrow-label">再释放×1</div>
+      </div>
+
+      <!-- 状态3: 0层 -->
+      <div class="state-box">
+        <div class="state-label">充能耗尽!</div>
+        <div class="wow-icon dim">
+          <div class="icon-bg dim"><span class="grip-symbol">🤜</span></div>
+          <div class="dim-mask"></div>
+          <div class="cd-sweep" style="background: conic-gradient(rgba(0,0,0,0.55) 0deg, rgba(0,0,0,0.55) 72deg, transparent 72deg);"></div>
+          <span class="cd-text red">20</span>
+          <span class="charge-num red">0</span>
+        </div>
+        <div class="state-info">
+          <div class="charge-label danger">充能 0/2</div>
+          <div class="detail">图标变暗+去色！</div>
+        </div>
+      </div>
+
+      <div class="arrow-container">
+        <div style="font-size:22px;color:#ffdd22;">→</div>
+        <div class="arrow-label">第1层25秒到</div>
+      </div>
+
+      <!-- 状态4: 恢复1层 -->
+      <div class="state-box">
+        <div class="state-label">恢复1层</div>
+        <div class="wow-icon bright">
+          <div class="icon-bg bright"><span class="grip-symbol">🤜</span></div>
+          <div class="cd-sweep" style="background: conic-gradient(rgba(0,0,0,0.65) 0deg, rgba(0,0,0,0.65) 18deg, transparent 18deg);"></div>
+          <span class="cd-text yellow">24</span>
+          <span class="charge-num white">1</span>
+        </div>
+        <div class="state-info">
+          <div class="charge-label warn">充能 1/2</div>
+          <div class="detail">变亮！第2层开始计时</div>
+        </div>
+      </div>
+
+      <div class="arrow-container">
+        <div style="font-size:22px;color:#8aff8a;">→</div>
+        <div class="arrow-label">第2层25秒到</div>
+      </div>
+
+      <!-- 状态5: 全部恢复 -->
+      <div class="state-box">
+        <div class="state-label">全部恢复</div>
+        <div class="wow-icon bright">
+          <div class="icon-bg bright"><span class="grip-symbol">🤜</span></div>
+          <span class="charge-num white">2</span>
+        </div>
+        <div class="state-info">
+          <div class="charge-label">充能 2/2</div>
+          <div class="detail">完全恢复</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ==================== 场景3 ==================== -->
+  <div class="scenario">
+    <div class="scenario-title">📌 场景三：释放 1 次，冷却中再释放 1 次</div>
+    <div class="scenario-desc">释放 1 次 → 冷却到一半时再释放 → 充能归零 → 继续等上一层恢复 → 然后第二层开始独立倒计时</div>
+    <div class="timeline">
+
+      <!-- 状态1 -->
+      <div class="state-box">
+        <div class="state-label">用了1次</div>
+        <div class="wow-icon bright">
+          <div class="icon-bg bright"><span class="grip-symbol">🤜</span></div>
+          <div class="cd-sweep" style="background: conic-gradient(rgba(0,0,0,0.65) 0deg, rgba(0,0,0,0.65) 36deg, transparent 36deg);"></div>
+          <span class="cd-text yellow">23</span>
+          <span class="charge-num white">1</span>
+        </div>
+        <div class="state-info">
+          <div class="charge-label warn">充能 1/2</div>
+          <div class="detail">25秒冷却开始</div>
+        </div>
+      </div>
+
+      <div class="arrow-container">
+        <div style="font-size:22px;color:#666;">→</div>
+        <div class="arrow-label">12秒后…</div>
+      </div>
+
+      <!-- 状态2: 冷却中 -->
+      <div class="state-box">
+        <div class="state-label">冷却中</div>
+        <div class="wow-icon bright">
+          <div class="icon-bg bright"><span class="grip-symbol">🤜</span></div>
+          <div class="cd-sweep" style="background: conic-gradient(rgba(0,0,0,0.65) 0deg, rgba(0,0,0,0.65) 173deg, transparent 173deg);"></div>
+          <span class="cd-text yellow">13</span>
+          <span class="charge-num white">1</span>
+        </div>
+        <div class="state-info">
+          <div class="charge-label warn">充能 1/2</div>
+          <div class="detail">还剩13秒恢复</div>
+        </div>
+      </div>
+
+      <div class="arrow-container">
+        <div style="font-size:22px;color:#ff4444;">→</div>
+        <div class="arrow-label">再释放!</div>
+      </div>
+
+      <!-- 状态3: 0层，继承剩余CD -->
+      <div class="state-box">
+        <div class="state-label">充能耗尽</div>
+        <div class="wow-icon dim">
+          <div class="icon-bg dim"><span class="grip-symbol">🤜</span></div>
+          <div class="dim-mask"></div>
+          <div class="cd-sweep" style="background: conic-gradient(rgba(0,0,0,0.55) 0deg, rgba(0,0,0,0.55) 173deg, transparent 173deg);"></div>
+          <span class="cd-text red">13</span>
+          <span class="charge-num red">0</span>
+        </div>
+        <div class="state-info">
+          <div class="charge-label danger">充能 0/2</div>
+          <div class="detail">继续等第1层的13秒</div>
+        </div>
+      </div>
+
+      <div class="arrow-container">
+        <div style="font-size:22px;color:#ffdd22;">→</div>
+        <div class="arrow-label">13秒后恢复</div>
+      </div>
+
+      <!-- 状态4 -->
+      <div class="state-box">
+        <div class="state-label">恢复1层</div>
+        <div class="wow-icon bright">
+          <div class="icon-bg bright"><span class="grip-symbol">🤜</span></div>
+          <div class="cd-sweep" style="background: conic-gradient(rgba(0,0,0,0.65) 0deg, rgba(0,0,0,0.65) 10deg, transparent 10deg);"></div>
+          <span class="cd-text yellow">25</span>
+          <span class="charge-num white">1</span>
+        </div>
+        <div class="state-info">
+          <div class="charge-label warn">充能 1/2</div>
+          <div class="detail">第2层开始新的25秒</div>
+        </div>
+      </div>
+
+      <div class="arrow-container">
+        <div style="font-size:22px;color:#8aff8a;">→</div>
+        <div class="arrow-label">25秒后</div>
+      </div>
+
+      <!-- 状态5 -->
+      <div class="state-box">
+        <div class="state-label">全部恢复</div>
+        <div class="wow-icon bright">
+          <div class="icon-bg bright"><span class="grip-symbol">🤜</span></div>
+          <span class="charge-num white">2</span>
+        </div>
+        <div class="state-info">
+          <div class="charge-label">充能 2/2</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+
+<!-- ==================== 交互演示 ==================== -->
+<div class="demo-section">
+  <div class="demo-title">🎮 交互演示 — 点击图标模拟释放死亡之握</div>
+  <div class="demo-container">
+    <div class="demo-icon" id="demoIcon" onclick="useGrip()">
+      <div class="icon-bg" id="demoIconBg"><span class="grip-symbol">🤜</span></div>
+      <div class="cd-sweep-anim" id="demoCdSweep"></div>
+      <div class="dim-mask" id="demoDimMask"></div>
+      <span class="cd-text" id="demoCdText" style="display:none;"></span>
+      <span class="charge-num" id="demoChargeNum">2</span>
+    </div>
+    <div class="demo-status" id="demoStatus">点击图标释放死亡之握 (充能 2/2)</div>
+    <div>
+      <button class="btn secondary" onclick="resetDemo()">重置</button>
+    </div>
+    <div class="demo-log" id="demoLog"></div>
+  </div>
+</div>
+
+<!-- ==================== 图例 ==================== -->
+<div class="legend">
+  <h3>📋 UI 元素说明</h3>
+  <ul>
+    <li><strong>图标明亮</strong> — 还有充能可用（≥1层）</li>
+    <li><strong>图标变暗+去色</strong> — 充能为 0，不可使用</li>
+    <li><strong>转圈遮罩(黑色扇形)</strong> — 冷却进度，顺时针旋转</li>
+    <li><strong>中央黄色数字</strong> — 剩余冷却秒数（有充能时黄色）</li>
+    <li><strong>中央红色数字</strong> — 剩余冷却秒数（0充能时红色）</li>
+    <li><strong>右下角白色数字</strong> — 当前充能层数</li>
+    <li><strong>右下角红色数字</strong> — 充能为 0 时变红</li>
+    <li><strong>Shift+拖拽</strong> — 移动图标位置（游戏内）</li>
+    <li><strong>/dkgrip</strong> — 斜杠命令查看帮助</li>
+  </ul>
+</div>
+
+<script>
+// 交互演示逻辑
+let demoCharges = 2;
+const DEMO_MAX = 2;
+const DEMO_CD = 10; // 演示用缩短为10秒
+let cdQueue = [];
+let animFrame = null;
+
+const demoIcon = document.getElementById('demoIcon');
+const demoIconBg = document.getElementById('demoIconBg');
+const demoCdSweep = document.getElementById('demoCdSweep');
+const demoDimMask = document.getElementById('demoDimMask');
+const demoCdText = document.getElementById('demoCdText');
+const demoChargeNum = document.getElementById('demoChargeNum');
+const demoStatus = document.getElementById('demoStatus');
+const demoLog = document.getElementById('demoLog');
+
+function log(msg, cls) {
+  const d = document.createElement('div');
+  d.className = cls || '';
+  const t = new Date();
+  d.textContent = `[${t.toLocaleTimeString()}] ${msg}`;
+  demoLog.prepend(d);
+}
+
+function useGrip() {
+  if (demoCharges <= 0) {
+    log('❌ 充能不足，无法释放！', '');
+    return;
+  }
+  demoCharges--;
+  const now = performance.now() / 1000;
+
+  if (cdQueue.length === 0) {
+    cdQueue.push(now + DEMO_CD);
+  } else {
+    const last = cdQueue[cdQueue.length - 1];
+    cdQueue.push(last + DEMO_CD);
+  }
+
+  log(`🤜 释放死亡之握！充能 ${demoCharges}/${DEMO_MAX}`, 'event');
+  updateDemo();
+  if (!animFrame) tick();
+}
+
+function updateDemo() {
+  const now = performance.now() / 1000;
+
+  // Process expired CDs
+  while (cdQueue.length > 0 && now >= cdQueue[0]) {
+    cdQueue.shift();
+    demoCharges = Math.min(demoCharges + 1, DEMO_MAX);
+    log(`✨ 充能恢复！现在 ${demoCharges}/${DEMO_MAX}`, 'restore');
+  }
+
+  // Update charge text
+  demoChargeNum.textContent = demoCharges;
+
+  if (demoCharges >= DEMO_MAX) {
+    // Full
+    demoChargeNum.style.color = '#fff';
+    demoIconBg.style.filter = '';
+    demoDimMask.style.display = 'none';
+    demoCdText.style.display = 'none';
+    demoCdSweep.style.background = 'none';
+    demoStatus.textContent = `充能满！点击图标释放 (充能 ${demoCharges}/${DEMO_MAX})`;
+  } else {
+    // Has CD
+    const nextExpire = cdQueue[0];
+    const remain = Math.max(0, nextExpire - now);
+    const progress = 1 - remain / DEMO_CD;
+    const deg = progress * 360;
+
+    demoCdSweep.style.background = `conic-gradient(transparent 0deg, transparent ${deg}deg, rgba(0,0,0,0.65) ${deg}deg)`;
+    demoCdText.style.display = 'block';
+    demoCdText.textContent = remain >= 10 ? Math.ceil(remain) : remain.toFixed(1);
+
+    if (demoCharges === 0) {
+      demoChargeNum.style.color = '#ff4444';
+      demoIconBg.style.filter = 'saturate(0.2) brightness(0.5)';
+      demoDimMask.style.display = 'block';
+      demoCdText.style.color = '#ff4444';
+    } else {
+      demoChargeNum.style.color = '#fff';
+      demoIconBg.style.filter = '';
+      demoDimMask.style.display = 'none';
+      demoCdText.style.color = '#ffdd22';
+    }
+    demoStatus.textContent = `充能 ${demoCharges}/${DEMO_MAX} · 下一层恢复: ${remain.toFixed(1)}秒`;
+  }
+}
+
+function tick() {
+  updateDemo();
+  if (cdQueue.length > 0) {
+    animFrame = requestAnimationFrame(tick);
+  } else {
+    animFrame = null;
+  }
+}
+
+function resetDemo() {
+  demoCharges = 2;
+  cdQueue = [];
+  if (animFrame) { cancelAnimationFrame(animFrame); animFrame = null; }
+  updateDemo();
+  demoLog.innerHTML = '';
+  log('🔄 已重置', '');
+}
+</script>
+
+</body>
+</html>
