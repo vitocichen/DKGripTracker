@@ -10,8 +10,10 @@ local MAX_CHARGES         = 2          -- 最大充能层数
 local CHARGE_COOLDOWN     = 25         -- 每层充能恢复时间（秒）
 local ICON_SIZE           = 40         -- 图标尺寸（像素）
 local ICON_TEXTURE        = 237532     -- Spell_DeathKnight_Strangulate 纹理ID
+local DK_CLASS_ID         = 6          -- 死亡骑士的 classID
 
 -- ======== 状态变量 ========
+local isDeathKnight = false            -- 当前角色是否为死亡骑士
 local charges       = MAX_CHARGES      -- 当前可用充能层数
 local cdQueue       = {}               -- 冷却队列: { expirationTime1, expirationTime2, ... }
 local isDragging    = false
@@ -82,6 +84,9 @@ border:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 1, -1)
 border:SetTexture("Interface\\Buttons\\UI-ActionButton-Border")
 border:SetBlendMode("ADD")
 border:SetAlpha(0.4)
+
+-- 默认隐藏，等 PLAYER_LOGIN 确认是 DK 后再显示
+frame:Hide()
 
 --------------------------------------------------------------
 -- 拖拽支持
@@ -259,6 +264,18 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
         end
 
     elseif event == "PLAYER_LOGIN" then
+        -- 职业检测：只有死亡骑士才显示
+        local _, _, classID = UnitClass("player")
+        if classID ~= DK_CLASS_ID then
+            frame:Hide()
+            self:UnregisterEvent("UNIT_SPELLCAST_SUCCEEDED")
+            -- print("|cFF888888[DK Grip Tracker]|r 当前角色非死亡骑士，插件已隐藏")
+            return
+        end
+
+        isDeathKnight = true
+        frame:Show()
+
         -- 登录时同步游戏内真实充能状态
         local function SyncCharges()
             local currentCharges, maxCharges, cooldownStart, cooldownDuration, chargeModRate
