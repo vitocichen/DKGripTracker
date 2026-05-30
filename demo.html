@@ -1,0 +1,678 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>充能矫正机制 · 场景对比演示</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #0f0f1e;
+    color: #e0e0e0;
+    font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+    padding: 30px;
+    min-height: 100vh;
+  }
+  h1 {
+    text-align: center;
+    color: #ffd100;
+    font-size: 26px;
+    margin-bottom: 8px;
+  }
+  .subtitle {
+    text-align: center;
+    color: #888;
+    font-size: 13px;
+    margin-bottom: 30px;
+  }
+  .container {
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+
+  /* 选择器 */
+  .selector {
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+    margin-bottom: 25px;
+  }
+  .tab {
+    padding: 10px 22px;
+    background: #2a2a3e;
+    border: 1px solid #444;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    color: #ccc;
+    transition: all 0.2s;
+  }
+  .tab.active.dk    { background: #c41f3b; color: #fff; border-color: #c41f3b; }
+  .tab.active.mage  { background: #40c0ff; color: #000; border-color: #40c0ff; }
+  .tab:hover:not(.active) { background: #3a3a4e; }
+
+  /* 场景卡片 */
+  .scenario {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 12px;
+    padding: 24px;
+    margin-bottom: 24px;
+  }
+  .scenario h2 {
+    font-size: 17px;
+    color: #ffd100;
+    margin-bottom: 4px;
+  }
+  .scenario .desc {
+    font-size: 13px;
+    color: #999;
+    margin-bottom: 18px;
+    line-height: 1.5;
+  }
+
+  /* 演示主体: 左侧时间轴 + 右侧图标 */
+  .demo-body {
+    display: grid;
+    grid-template-columns: 1fr 220px;
+    gap: 24px;
+    align-items: stretch;
+  }
+
+  /* 时间轴 */
+  .timeline-wrap {
+    background: rgba(0,0,0,0.3);
+    border-radius: 8px;
+    padding: 16px;
+    position: relative;
+  }
+  .timeline-label {
+    font-size: 11px;
+    color: #888;
+    margin-bottom: 8px;
+  }
+  .timeline {
+    position: relative;
+    height: 100px;
+    background: linear-gradient(to right, #1a1a2e, #2a2a3e);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+  /* 时间刻度 */
+  .ticks {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+  }
+  .tick {
+    position: absolute;
+    top: 0; bottom: 0;
+    width: 1px;
+    background: rgba(255,255,255,0.08);
+  }
+  .tick-label {
+    position: absolute;
+    bottom: 2px;
+    transform: translateX(-50%);
+    font-size: 10px;
+    color: #666;
+  }
+  /* 当前时间指针 */
+  .cursor {
+    position: absolute;
+    top: 0; bottom: 0;
+    width: 2px;
+    background: #ffd100;
+    box-shadow: 0 0 8px #ffd100;
+    transition: left 0.05s linear;
+    z-index: 5;
+  }
+  .cursor::after {
+    content: '';
+    position: absolute;
+    top: -4px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 10px; height: 10px;
+    background: #ffd100;
+    border-radius: 50%;
+  }
+  /* CD 段 */
+  .cd-bar {
+    position: absolute;
+    height: 16px;
+    border-radius: 3px;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: bold;
+    color: #fff;
+    text-shadow: 0 1px 2px #000;
+    overflow: hidden;
+  }
+  .cd-bar.layer1 { top: 30px; background: linear-gradient(90deg, #6b2fa0, #9b3dc7); }
+  .cd-bar.layer2 { top: 52px; background: linear-gradient(90deg, #2a6ea0, #3d8ec7); }
+  .cd-bar.reset-anim {
+    animation: resetFlash 0.6s ease;
+  }
+  @keyframes resetFlash {
+    0%   { box-shadow: 0 0 0 0 rgba(255, 209, 0, 0.9); }
+    50%  { box-shadow: 0 0 18px 6px rgba(255, 209, 0, 0.7); }
+    100% { box-shadow: 0 0 0 0 rgba(255, 209, 0, 0); }
+  }
+
+  /* 释放标记 */
+  .cast-marker {
+    position: absolute;
+    top: 76px;
+    transform: translateX(-50%);
+    font-size: 18px;
+    z-index: 4;
+    animation: castPop 0.5s ease;
+  }
+  .cast-marker.normal { color: #8aff8a; }
+  .cast-marker.correct { color: #ff6644; text-shadow: 0 0 6px #ff6644; }
+  @keyframes castPop {
+    0% { transform: translateX(-50%) scale(0); }
+    60% { transform: translateX(-50%) scale(1.4); }
+    100% { transform: translateX(-50%) scale(1); }
+  }
+
+  /* 右侧图标 */
+  .icon-side {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    background: rgba(0,0,0,0.3);
+    border-radius: 8px;
+    padding: 16px;
+  }
+  .wow-icon {
+    width: 80px;
+    height: 80px;
+    position: relative;
+    border: 2px solid #666;
+    border-radius: 6px;
+    overflow: hidden;
+    background: #2a1a3a;
+    transition: all 0.3s;
+  }
+  .wow-icon.dk-icon    { background: linear-gradient(135deg, #6b2fa0, #9b3dc7); }
+  .wow-icon.mage-icon  { background: linear-gradient(135deg, #1a5599, #4a9fdf, #6bbeff); }
+  .wow-icon.dim {
+    filter: saturate(0.2) brightness(0.55);
+    border-color: #333;
+  }
+  .icon-symbol {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 36px;
+    text-shadow: 0 0 10px rgba(0,0,0,0.6);
+    z-index: 1;
+  }
+  .icon-cd-text {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 24px;
+    font-weight: bold;
+    text-shadow: 0 0 4px #000, 1px 1px 2px #000;
+    z-index: 5;
+    color: #ffdd22;
+  }
+  .icon-cd-text.red { color: #ff4444; }
+  .icon-cd-text.empty { display: none; }
+  .icon-charge-num {
+    position: absolute;
+    bottom: 2px; right: 4px;
+    font-size: 18px;
+    font-weight: bold;
+    text-shadow: 0 0 3px #000, 1px 1px 2px #000;
+    z-index: 6;
+    color: #fff;
+  }
+  .icon-charge-num.red { color: #ff4444; }
+  /* 圆形 conic 冷却扇形 */
+  .icon-sweep {
+    position: absolute;
+    top: 0; left: 0; width: 100%; height: 100%;
+    pointer-events: none;
+    z-index: 2;
+  }
+  .icon-status {
+    font-size: 12px;
+    color: #aaa;
+    text-align: center;
+    min-height: 32px;
+  }
+  .icon-status.alert { color: #ff6644; font-weight: bold; }
+
+  /* 控制按钮 */
+  .controls {
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+    margin-top: 16px;
+  }
+  .btn {
+    padding: 8px 18px;
+    background: #c41f3b;
+    border: none;
+    color: #fff;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    transition: all 0.2s;
+  }
+  .btn:hover { background: #e02550; }
+  .btn.secondary { background: #444; }
+  .btn.secondary:hover { background: #555; }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  /* 事件日志 */
+  .log {
+    margin-top: 14px;
+    background: rgba(0,0,0,0.4);
+    padding: 12px 14px;
+    border-radius: 6px;
+    max-height: 130px;
+    overflow-y: auto;
+    font-size: 12px;
+    font-family: 'Consolas', monospace;
+  }
+  .log .entry { margin-bottom: 4px; line-height: 1.5; }
+  .log .entry.normal  { color: #8aff8a; }
+  .log .entry.correct { color: #ff8855; font-weight: bold; }
+  .log .entry.restore { color: #ffdd22; }
+  .log .entry.info    { color: #888; }
+
+  /* 说明卡 */
+  .note {
+    background: rgba(255, 209, 0, 0.08);
+    border-left: 3px solid #ffd100;
+    padding: 12px 16px;
+    border-radius: 4px;
+    font-size: 13px;
+    color: #ddd;
+    margin-bottom: 24px;
+    line-height: 1.6;
+  }
+  .note strong { color: #ffd100; }
+  .note .key { color: #ff6644; font-weight: bold; }
+  .note .ok  { color: #8aff8a; font-weight: bold; }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <h1>⚙️ 充能矫正机制 · 场景对比动画</h1>
+  <p class="subtitle">点击下方场景按钮观察 DK / 法师在不同场景下的状态变化</p>
+
+  <div class="note">
+    <strong>📌 核心规则（DK 和 法师 完全相同）：</strong><br>
+    ① 还有充能时使用技能 → <span class="ok">走正常逻辑（扣 1 层、入队）</span>，老逻辑 0 改动<br>
+    ② <span class="key">本地显示 0 充能</span>，但游戏却放出了技能 → 触发矫正：把<strong>最早恢复的那层 CD 重置为从现在开始重新计时</strong>，后续层跟着延后
+  </div>
+
+  <!-- 职业切换 -->
+  <div class="selector">
+    <div class="tab dk active" data-class="dk" onclick="switchClass('dk')">⚔️ DK · 死亡之握 (25s)</div>
+    <div class="tab mage" data-class="mage" onclick="switchClass('mage')">✨ 法师 · 闪现 (15s)</div>
+  </div>
+
+  <!-- 场景一：正常 -->
+  <div class="scenario">
+    <h2>场景一：正常使用（永远走老逻辑，矫正不参与）</h2>
+    <div class="desc">满 2 层 → 用 1 次 → 等待恢复。这是你最常见的情况。</div>
+    <div class="demo-body">
+      <div class="timeline-wrap">
+        <div class="timeline-label">时间轴 (0s ─── <span class="t-end">30s</span>)</div>
+        <div class="timeline" id="tl-1">
+          <div class="ticks" data-ticks></div>
+          <div class="cursor" style="left:0%"></div>
+        </div>
+      </div>
+      <div class="icon-side">
+        <div class="wow-icon" id="icon-1">
+          <span class="icon-symbol" data-symbol>🤜</span>
+          <div class="icon-sweep" data-sweep></div>
+          <span class="icon-cd-text empty" data-cdtext>0</span>
+          <span class="icon-charge-num" data-chargenum>2</span>
+        </div>
+        <div class="icon-status" id="status-1">充能 2/2</div>
+      </div>
+    </div>
+    <div class="controls">
+      <button class="btn" onclick="playScenario(1)">▶ 播放</button>
+      <button class="btn secondary" onclick="resetScenario(1)">⟲ 重置</button>
+    </div>
+    <div class="log" id="log-1"></div>
+  </div>
+
+  <!-- 场景二：连按耗尽 -->
+  <div class="scenario">
+    <h2>场景二：连按 2 次耗尽（矫正不参与，原逻辑处理）</h2>
+    <div class="desc">满 2 层 → 连按 2 次 → 充能为 0 → 第 1 层走完才开始第 2 层。</div>
+    <div class="demo-body">
+      <div class="timeline-wrap">
+        <div class="timeline-label">时间轴 (0s ─── <span class="t-end">60s</span>)</div>
+        <div class="timeline" id="tl-2">
+          <div class="ticks" data-ticks></div>
+          <div class="cursor" style="left:0%"></div>
+        </div>
+      </div>
+      <div class="icon-side">
+        <div class="wow-icon" id="icon-2">
+          <span class="icon-symbol" data-symbol>🤜</span>
+          <div class="icon-sweep" data-sweep></div>
+          <span class="icon-cd-text empty" data-cdtext>0</span>
+          <span class="icon-charge-num" data-chargenum>2</span>
+        </div>
+        <div class="icon-status" id="status-2">充能 2/2</div>
+      </div>
+    </div>
+    <div class="controls">
+      <button class="btn" onclick="playScenario(2)">▶ 播放</button>
+      <button class="btn secondary" onclick="resetScenario(2)">⟲ 重置</button>
+    </div>
+    <div class="log" id="log-2"></div>
+  </div>
+
+  <!-- 场景三：矫正机制 ⭐ -->
+  <div class="scenario">
+    <h2>⭐ 场景三：矫正机制触发（本地 0 充能但技能放成功）</h2>
+    <div class="desc">
+      连按 2 次耗尽 → 中途某天赋/技能（如法师"操控时间"或 DK 特殊充能）补了一层 → 你又放了一次。<br>
+      <span style="color:#ff8855;">老版插件这种情况会卡死 / 显示错乱，新版自动重置首层 CD 校准状态。</span>
+    </div>
+    <div class="demo-body">
+      <div class="timeline-wrap">
+        <div class="timeline-label">时间轴 (0s ─── <span class="t-end">60s</span>)</div>
+        <div class="timeline" id="tl-3">
+          <div class="ticks" data-ticks></div>
+          <div class="cursor" style="left:0%"></div>
+        </div>
+      </div>
+      <div class="icon-side">
+        <div class="wow-icon" id="icon-3">
+          <span class="icon-symbol" data-symbol>🤜</span>
+          <div class="icon-sweep" data-sweep></div>
+          <span class="icon-cd-text empty" data-cdtext>0</span>
+          <span class="icon-charge-num" data-chargenum>2</span>
+        </div>
+        <div class="icon-status" id="status-3">充能 2/2</div>
+      </div>
+    </div>
+    <div class="controls">
+      <button class="btn" onclick="playScenario(3)">▶ 播放</button>
+      <button class="btn secondary" onclick="resetScenario(3)">⟲ 重置</button>
+    </div>
+    <div class="log" id="log-3"></div>
+  </div>
+
+</div>
+
+<script>
+// ===================== 配置 =====================
+const CLASS_CFG = {
+  dk:   { cd: 25, label: '死亡之握', symbol: '🤜', iconClass: 'dk-icon',   color: '#c41f3b', maxTime: { 1: 30, 2: 60, 3: 60 } },
+  mage: { cd: 15, label: '闪现',     symbol: '✨', iconClass: 'mage-icon', color: '#40c0ff', maxTime: { 1: 20, 2: 35, 3: 50 } },
+};
+let currentClass = 'dk';
+
+// 三个场景的脚本（事件序列）
+// 每个事件: { t: 时间(秒), type: 'cast'|'correct', desc: 描述 }
+function getScript(scenario) {
+  const cd = CLASS_CFG[currentClass].cd;
+  if (scenario === 1) {
+    // 正常: 满层 → t=2 用一次
+    return [
+      { t: 2, type: 'cast', desc: '正常释放（充能 2→1）' },
+    ];
+  }
+  if (scenario === 2) {
+    // 连按耗尽: t=2 释放, t=4 释放
+    return [
+      { t: 2, type: 'cast', desc: '正常释放（充能 2→1）' },
+      { t: 4, type: 'cast', desc: '正常释放（充能 1→0）' },
+    ];
+  }
+  if (scenario === 3) {
+    // 矫正: t=2 释放, t=4 释放（耗尽）, t=8 矫正释放
+    return [
+      { t: 2, type: 'cast',    desc: '正常释放（充能 2→1）' },
+      { t: 4, type: 'cast',    desc: '正常释放（充能 1→0）' },
+      { t: 8, type: 'correct', desc: '⚠️ 0 充能但技能放出！触发矫正：第1层CD 重置为从 t=8 开始计 ' + cd + 's' },
+    ];
+  }
+}
+
+// ===================== 场景状态 =====================
+const states = { 1: null, 2: null, 3: null };
+
+function freshState() {
+  return {
+    charges: 2,
+    queue: [],          // [expireTime, ...]
+    lastCorrectAt: -999,
+    casts: [],          // 历史释放点 { t, type }
+    timer: null,
+    start: null,
+    scriptIdx: 0,
+    finished: false,
+  };
+}
+
+function resetScenario(n) {
+  if (states[n] && states[n].timer) {
+    cancelAnimationFrame(states[n].timer);
+  }
+  states[n] = freshState();
+  renderScenario(n, 0);
+  document.getElementById('log-' + n).innerHTML = '';
+  log(n, 'info', '已重置 · 充能 2/2');
+}
+
+function playScenario(n) {
+  resetScenario(n);
+  const s = states[n];
+  s.start = performance.now();
+  const script = getScript(n);
+
+  function tick(now) {
+    if (s.finished) return;
+    const elapsed = (now - s.start) / 1000;
+
+    // 处理脚本事件
+    while (s.scriptIdx < script.length && elapsed >= script[s.scriptIdx].t) {
+      const ev = script[s.scriptIdx++];
+      handleEvent(n, ev, elapsed);
+    }
+
+    // 处理冷却恢复
+    while (s.queue.length > 0 && elapsed >= s.queue[0]) {
+      s.queue.shift();
+      s.charges = Math.min(s.charges + 1, 2);
+      log(n, 'restore', `✨ t=${elapsed.toFixed(1)}s 恢复 1 层 → 充能 ${s.charges}/2`);
+    }
+
+    renderScenario(n, elapsed);
+
+    const maxT = CLASS_CFG[currentClass].maxTime[n];
+    if (elapsed >= maxT) {
+      s.finished = true;
+      log(n, 'info', `▣ 演示结束（t=${maxT}s）`);
+      return;
+    }
+    s.timer = requestAnimationFrame(tick);
+  }
+  s.timer = requestAnimationFrame(tick);
+}
+
+function handleEvent(n, ev, elapsed) {
+  const s = states[n];
+  const cd = CLASS_CFG[currentClass].cd;
+  s.casts.push({ t: ev.t, type: ev.type });
+
+  if (ev.type === 'cast') {
+    if (s.charges > 0) {
+      // 正常分支
+      s.charges -= 1;
+      if (s.queue.length === 0) {
+        s.queue.push(ev.t + cd);
+      } else {
+        s.queue.push(s.queue[s.queue.length - 1] + cd);
+      }
+      log(n, 'normal', `🤜 t=${ev.t}s 正常释放 → 充能 ${s.charges}/2，队列=[${s.queue.map(v => v.toFixed(0)).join(', ')}]`);
+    }
+  } else if (ev.type === 'correct') {
+    // 矫正分支
+    s.lastCorrectAt = ev.t;
+    if (s.queue.length === 0) {
+      s.queue.push(ev.t + cd);
+    } else {
+      s.queue[0] = ev.t + cd;
+      for (let i = 1; i < s.queue.length; i++) {
+        s.queue[i] = s.queue[i - 1] + cd;
+      }
+    }
+    log(n, 'correct', `⚠️ t=${ev.t}s ${ev.desc} 队列=[${s.queue.map(v => v.toFixed(0)).join(', ')}]`);
+  }
+}
+
+// ===================== 渲染 =====================
+function renderScenario(n, elapsed) {
+  const s = states[n];
+  const cfg = CLASS_CFG[currentClass];
+  const maxT = cfg.maxTime[n];
+
+  // 时间轴
+  const tl = document.getElementById('tl-' + n);
+  tl.parentElement.querySelector('.t-end').textContent = maxT + 's';
+
+  // 时间刻度
+  const ticksEl = tl.querySelector('[data-ticks]');
+  ticksEl.innerHTML = '';
+  const tickStep = maxT <= 30 ? 5 : 10;
+  for (let i = 0; i <= maxT; i += tickStep) {
+    const pct = (i / maxT) * 100;
+    const tick = document.createElement('div');
+    tick.className = 'tick';
+    tick.style.left = pct + '%';
+    ticksEl.appendChild(tick);
+    const lbl = document.createElement('div');
+    lbl.className = 'tick-label';
+    lbl.style.left = pct + '%';
+    lbl.textContent = i + 's';
+    ticksEl.appendChild(lbl);
+  }
+
+  // 清掉之前的 cd-bar 和 cast-marker
+  tl.querySelectorAll('.cd-bar, .cast-marker').forEach(el => el.remove());
+
+  // 绘制队列层
+  const layerColors = ['layer1', 'layer2'];
+  s.queue.forEach((expireT, i) => {
+    const startT = expireT - cfg.cd;
+    const left = (startT / maxT) * 100;
+    const width = (cfg.cd / maxT) * 100;
+    const bar = document.createElement('div');
+    bar.className = 'cd-bar ' + layerColors[i];
+    bar.style.left = left + '%';
+    bar.style.width = width + '%';
+    bar.textContent = `第${i+1}层 ${cfg.cd}s`;
+    if (Math.abs(s.lastCorrectAt - startT) < 0.1) {
+      bar.classList.add('reset-anim');
+    }
+    tl.appendChild(bar);
+  });
+
+  // 绘制释放标记
+  s.casts.forEach(c => {
+    const marker = document.createElement('div');
+    marker.className = 'cast-marker ' + (c.type === 'correct' ? 'correct' : 'normal');
+    marker.style.left = (c.t / maxT) * 100 + '%';
+    marker.textContent = c.type === 'correct' ? '⚠' : '↓';
+    marker.title = `t=${c.t}s ${c.type}`;
+    tl.appendChild(marker);
+  });
+
+  // 时间游标
+  const cursor = tl.querySelector('.cursor');
+  cursor.style.left = Math.min(elapsed / maxT * 100, 100) + '%';
+
+  // 右侧图标
+  const iconEl = document.getElementById('icon-' + n);
+  iconEl.classList.remove('dk-icon', 'mage-icon', 'dim');
+  iconEl.classList.add(cfg.iconClass);
+  iconEl.querySelector('[data-symbol]').textContent = cfg.symbol;
+
+  const cdtext = iconEl.querySelector('[data-cdtext]');
+  const chargenum = iconEl.querySelector('[data-chargenum]');
+  const sweep = iconEl.querySelector('[data-sweep]');
+
+  chargenum.textContent = s.charges;
+  chargenum.classList.toggle('red', s.charges === 0);
+
+  if (s.queue.length > 0) {
+    const remain = Math.max(0, s.queue[0] - elapsed);
+    cdtext.classList.remove('empty');
+    cdtext.textContent = remain >= 10 ? Math.ceil(remain) : remain.toFixed(1);
+    cdtext.classList.toggle('red', s.charges === 0);
+    const progress = 1 - remain / cfg.cd;
+    const deg = progress * 360;
+    sweep.style.background = `conic-gradient(transparent 0deg, transparent ${deg}deg, rgba(0,0,0,0.65) ${deg}deg)`;
+  } else {
+    cdtext.classList.add('empty');
+    sweep.style.background = 'none';
+  }
+
+  if (s.charges === 0) {
+    iconEl.classList.add('dim');
+  }
+
+  // 状态文字
+  const statusEl = document.getElementById('status-' + n);
+  if (s.charges >= 2) {
+    statusEl.className = 'icon-status';
+    statusEl.textContent = `充能 ${s.charges}/2 · 满`;
+  } else if (s.queue.length > 0) {
+    const remain = Math.max(0, s.queue[0] - elapsed);
+    statusEl.className = 'icon-status' + (s.charges === 0 ? ' alert' : '');
+    statusEl.textContent = `充能 ${s.charges}/2 · 下层${remain.toFixed(1)}s`;
+  } else {
+    statusEl.className = 'icon-status';
+    statusEl.textContent = `充能 ${s.charges}/2`;
+  }
+}
+
+// ===================== 工具 =====================
+function log(n, cls, msg) {
+  const el = document.getElementById('log-' + n);
+  const div = document.createElement('div');
+  div.className = 'entry ' + cls;
+  div.textContent = msg;
+  el.prepend(div);
+}
+
+function switchClass(cls) {
+  currentClass = cls;
+  document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
+  document.querySelector('.tab.' + cls).classList.add('active');
+  // 全部重置
+  for (let i = 1; i <= 3; i++) {
+    resetScenario(i);
+  }
+}
+
+// 初始化
+for (let i = 1; i <= 3; i++) {
+  resetScenario(i);
+}
+</script>
+
+</body>
+</html>

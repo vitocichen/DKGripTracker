@@ -1,22 +1,45 @@
 --------------------------------------------------------------
--- DK Grip Tracker — 死亡之握充能冷却监控
+-- DK Grip Tracker — 职业核心技能充能冷却监控
+-- 死亡骑士: 死亡之握 (25s / 2 充能)
+-- 法师:     闪现     (15s / 2 充能)
 -- 作者: DK-姜世离（燃烧之刃）
 --------------------------------------------------------------
 local addonName, ns = ...
 
+-- ======== 职业配置 ========
+-- classID: 6=死亡骑士, 8=法师
+local CLASS_CONFIG = {
+    [6] = {
+        spellID       = 49576,                                    -- 死亡之握
+        spellName     = "死亡之握",
+        maxCharges    = 2,
+        chargeCD      = 25,
+        iconTextureID = 237532,                                   -- Spell_DeathKnight_Strangulate
+        colorPrint    = "FF00FF00",                               -- 绿色
+    },
+    [8] = {
+        spellID       = 1953,                                     -- 闪现 Blink
+        spellName     = "闪现",
+        maxCharges    = 2,
+        chargeCD      = 15,
+        iconTextureID = 135736,                                   -- Spell_Arcane_Blink
+        colorPrint    = "FF40C0FF",                               -- 法师蓝
+    },
+}
+
 -- ======== 常量 ========
-local DEATH_GRIP_SPELL_ID = 49576      -- 死亡之握 spellId
-local MAX_CHARGES         = 2          -- 最大充能层数
-local CHARGE_COOLDOWN     = 25         -- 每层充能恢复时间（秒）
-local ICON_SIZE           = 40         -- 图标尺寸（像素）
-local ICON_TEXTURE        = 237532     -- Spell_DeathKnight_Strangulate 纹理ID
-local DK_CLASS_ID         = 6          -- 死亡骑士的 classID
+local ICON_SIZE = 40
+
+-- ======== 运行时配置（PLAYER_LOGIN 后赋值） ========
+local cfg              -- 当前职业的配置（CLASS_CONFIG[classID]）
+local TRACKED_SPELL_ID -- 当前追踪的技能 ID
+local MAX_CHARGES      -- 当前最大充能
+local CHARGE_COOLDOWN  -- 当前充能恢复时间
 
 -- ======== 状态变量 ========
-local isDeathKnight = false            -- 当前角色是否为死亡骑士
-local charges       = MAX_CHARGES      -- 当前可用充能层数
-local cdQueue       = {}               -- 冷却队列: { expirationTime1, expirationTime2, ... }
-local isDragging    = false
+local charges    = 0
+local cdQueue    = {}     -- 冷却队列: { expirationTime1, expirationTime2, ... }
+local isDragging = false
 
 -- ======== 保存变量 ========
 local db -- SavedVariables reference
@@ -27,11 +50,14 @@ local db -- SavedVariables reference
 local function FormatTime(sec)
     if sec >= 10 then
         return string.format("%d", sec)
-    elseif sec >= 1 then
-        return string.format("%.1f", sec)
     else
         return string.format("%.1f", sec)
     end
+end
+
+local function PrintMsg(msg)
+    local color = (cfg and cfg.colorPrint) or "FF00FF00"
+    print("|c" .. color .. "[Grip Tracker]|r " .. msg)
 end
 
 --------------------------------------------------------------
@@ -48,7 +74,6 @@ frame:SetClampedToScreen(true)
 -- 图标纹理
 local icon = frame:CreateTexture(nil, "ARTWORK")
 icon:SetAllPoints()
-icon:SetTexture(ICON_TEXTURE)
 
 -- 冷却模型（转圈圈）
 local cooldownModel = CreateFrame("Cooldown", "DKGripTrackerCooldown", frame, "CooldownFrameTemplate")
@@ -56,22 +81,22 @@ cooldownModel:SetAllPoints()
 cooldownModel:SetDrawSwipe(true)
 cooldownModel:SetDrawBling(true)
 cooldownModel:SetSwipeColor(0, 0, 0, 0.7)
-cooldownModel:SetHideCountdownNumbers(true) -- 我们自己显示文字
+cooldownModel:SetHideCountdownNumbers(true)
 
--- 冷却文字（中央大数字，显示剩余秒数）
+-- 冷却文字（中央大数字）
 local cdText = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
 cdText:SetPoint("CENTER", frame, "CENTER", 0, 0)
 cdText:SetFont(STANDARD_TEXT_FONT, 18, "OUTLINE")
 cdText:SetTextColor(1, 1, 0.2)
 cdText:SetText("")
 
--- 充能次数文字（右下角小数字）
+-- 充能次数文字（右下角）
 local chargeText = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
 chargeText:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -2, 2)
 chargeText:SetFont(STANDARD_TEXT_FONT, 14, "OUTLINE")
 chargeText:SetTextColor(1, 1, 1)
 
--- 变暗遮罩（充能为 0 时变暗图标）
+-- 变暗遮罩
 local dimOverlay = frame:CreateTexture(nil, "OVERLAY")
 dimOverlay:SetAllPoints()
 dimOverlay:SetColorTexture(0, 0, 0, 0.55)
@@ -85,7 +110,7 @@ border:SetTexture("Interface\\Buttons\\UI-ActionButton-Border")
 border:SetBlendMode("ADD")
 border:SetAlpha(0.4)
 
--- 默认隐藏，等 PLAYER_LOGIN 确认是 DK 后再显示
+-- 默认隐藏，等 PLAYER_LOGIN 确认职业后再显示
 frame:Hide()
 
 --------------------------------------------------------------
@@ -101,7 +126,6 @@ end)
 frame:SetScript("OnDragStop", function(self)
     self:StopMovingOrSizing()
     isDragging = false
-    -- 保存位置
     local point, _, relPoint, x, y = self:GetPoint()
     if db then
         db.point    = point
@@ -113,10 +137,20 @@ end)
 
 -- 提示
 frame:SetScript("OnEnter", function(self)
+    if not cfg then return end
     GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-    GameTooltip:SetText("死亡之握追踪器", 1, 1, 1)
+    GameTooltip:SetText(cfg.spellName .. "追踪器", 1, 1, 1)
+    GameTooltip:AddLine(" ")
+    GameTooltip:AddLine("操作说明:", 1, 0.82, 0)
     GameTooltip:AddLine("Shift+左键拖动移动位置", 0.7, 0.7, 0.7)
-    GameTooltip:AddLine("右键点击锁定/解锁", 0.7, 0.7, 0.7)
+    GameTooltip:AddLine(" ")
+    GameTooltip:AddLine("设置命令:", 1, 0.82, 0)
+    GameTooltip:AddLine("/dkgrip 或 /grip - 查看帮助", 0.7, 0.7, 0.7)
+    GameTooltip:AddLine("/dkgrip reset - 重置位置", 0.7, 0.7, 0.7)
+    GameTooltip:AddLine("/dkgrip sync - 同步游戏充能状态", 0.7, 0.7, 0.7)
+    GameTooltip:AddLine("/dkgrip 50 - 设置图标大小(20-100)", 0.7, 0.7, 0.7)
+    GameTooltip:AddLine(" ")
+    GameTooltip:AddLine("当前状态:", 1, 0.82, 0)
     GameTooltip:AddLine(string.format("充能: %d/%d", charges, MAX_CHARGES), 0.2, 1, 0.2)
     if #cdQueue > 0 then
         local now = GetTime()
@@ -127,6 +161,8 @@ frame:SetScript("OnEnter", function(self)
             end
         end
     end
+    GameTooltip:AddLine(" ")
+    GameTooltip:AddDoubleLine("作者:", "DK-姜世离（燃烧之刃）", 0.5, 0.5, 0.5, 0.5, 0.5, 0.5)
     GameTooltip:Show()
 end)
 
@@ -137,37 +173,29 @@ end)
 --------------------------------------------------------------
 -- 充能 & 冷却 逻辑
 --------------------------------------------------------------
-
---- 更新 UI 显示
 local function UpdateDisplay()
-    -- 更新充能文字
     chargeText:SetText(tostring(charges))
 
     if charges >= MAX_CHARGES then
-        -- 满充能: 图标明亮，无冷却，白色数字
         chargeText:SetTextColor(1, 1, 1)
         dimOverlay:Hide()
         icon:SetDesaturated(false)
         cdText:SetText("")
         cooldownModel:Clear()
     elseif charges > 0 then
-        -- 有充能但不满: 图标正常亮，显示冷却（恢复下一层）
         chargeText:SetTextColor(1, 1, 1)
         dimOverlay:Hide()
         icon:SetDesaturated(false)
     else
-        -- 0 充能: 图标变暗
         chargeText:SetTextColor(1, 0.2, 0.2)
         dimOverlay:Show()
         icon:SetDesaturated(true)
     end
 end
 
---- 处理冷却队列恢复
 local function ProcessCooldownQueue()
     local now = GetTime()
 
-    -- 检查队列中是否有已到期的冷却
     while #cdQueue > 0 do
         if now >= cdQueue[1] then
             table.remove(cdQueue, 1)
@@ -177,14 +205,11 @@ local function ProcessCooldownQueue()
         end
     end
 
-    -- 更新冷却转圈显示（总是显示最近一层的恢复进度）
     if #cdQueue > 0 then
         local nextExpire = cdQueue[1]
         local remain = nextExpire - now
         if remain > 0 then
-            -- 设置冷却模型
             cooldownModel:SetCooldown(nextExpire - CHARGE_COOLDOWN, CHARGE_COOLDOWN)
-            -- 冷却文字
             cdText:SetText(FormatTime(remain))
             if charges == 0 then
                 cdText:SetTextColor(1, 0.2, 0.2)
@@ -200,23 +225,76 @@ local function ProcessCooldownQueue()
     UpdateDisplay()
 end
 
---- 使用一次死亡之握（成功释放时调用）
-local function OnGripUsed()
-    if charges <= 0 then return end -- 防御性检查
-
-    charges = charges - 1
+local function OnSpellUsed()
     local now = GetTime()
 
-    if #cdQueue == 0 then
-        -- 队列为空，直接开始 25 秒冷却
-        table.insert(cdQueue, now + CHARGE_COOLDOWN)
+    if charges > 0 then
+        -- 正常情况：本地有充能，按原逻辑扣一层并入队
+        charges = charges - 1
+        if #cdQueue == 0 then
+            table.insert(cdQueue, now + CHARGE_COOLDOWN)
+        else
+            local lastExpire = cdQueue[#cdQueue]
+            table.insert(cdQueue, lastExpire + CHARGE_COOLDOWN)
+        end
     else
-        -- 队列中已有冷却，新的一层从上一层结束后开始
-        local lastExpire = cdQueue[#cdQueue]
-        table.insert(cdQueue, lastExpire + CHARGE_COOLDOWN)
+        -- 矫正机制：本地 0 充能但技能竟然放成功了
+        -- 说明被外部途径（操控时间/天赋/装备等）补充了充能
+        -- 把队列首项重置为从现在重新计时，后续层依次跟随
+        if #cdQueue == 0 then
+            -- 极端兜底：连队列都空了，那就当作普通使用建一层 CD
+            table.insert(cdQueue, now + CHARGE_COOLDOWN)
+        else
+            cdQueue[1] = now + CHARGE_COOLDOWN
+            -- 后续层的起始 = 前一层的结束，连锁更新
+            for i = 2, #cdQueue do
+                cdQueue[i] = cdQueue[i - 1] + CHARGE_COOLDOWN
+            end
+        end
     end
 
     ProcessCooldownQueue()
+end
+
+--- 同步游戏内真实充能状态
+local function SyncCharges(silent)
+    local currentCharges, maxCharges, cooldownStart, cooldownDuration
+    if C_Spell and C_Spell.GetSpellCharges then
+        local info = C_Spell.GetSpellCharges(TRACKED_SPELL_ID)
+        if info then
+            currentCharges   = info.currentCharges
+            maxCharges       = info.maxCharges
+            cooldownStart    = info.cooldownStartTime
+            cooldownDuration = info.cooldownDuration
+        end
+    elseif GetSpellCharges then
+        currentCharges, maxCharges, cooldownStart, cooldownDuration = GetSpellCharges(TRACKED_SPELL_ID)
+    end
+
+    if currentCharges then
+        charges = currentCharges
+        cdQueue = {}
+
+        if currentCharges < maxCharges and cooldownStart and cooldownStart > 0 and cooldownDuration and cooldownDuration > 0 then
+            local expireTime = cooldownStart + cooldownDuration
+            table.insert(cdQueue, expireTime)
+            local missing = maxCharges - currentCharges
+            for i = 2, missing do
+                table.insert(cdQueue, expireTime + (i - 1) * CHARGE_COOLDOWN)
+            end
+        end
+
+        ProcessCooldownQueue()
+        if not silent then
+            PrintMsg("已加载 — " .. cfg.spellName .. " 充能: " .. charges .. "/" .. MAX_CHARGES)
+        end
+        return true
+    else
+        if not silent then
+            PrintMsg("|cFFFF6600未检测到 " .. cfg.spellName .. " 技能（可能尚未学习）|r")
+        end
+        return false
+    end
 end
 
 --------------------------------------------------------------
@@ -225,9 +303,8 @@ end
 local elapsed_acc = 0
 frame:SetScript("OnUpdate", function(self, elapsed)
     elapsed_acc = elapsed_acc + elapsed
-    if elapsed_acc < 0.05 then return end -- ~20fps 刷新
+    if elapsed_acc < 0.05 then return end
     elapsed_acc = 0
-
     if #cdQueue > 0 then
         ProcessCooldownQueue()
     end
@@ -245,17 +322,13 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
     if event == "ADDON_LOADED" then
         local loadedAddon = ...
         if loadedAddon == addonName then
-            -- 初始化 SavedVariables
             DKGripTrackerDB = DKGripTrackerDB or {}
             db = DKGripTrackerDB
 
-            -- 恢复位置
             if db.point then
                 frame:ClearAllPoints()
                 frame:SetPoint(db.point, UIParent, db.relPoint, db.x, db.y)
             end
-
-            -- 恢复图标大小
             if db.iconSize then
                 frame:SetSize(db.iconSize, db.iconSize)
             end
@@ -264,65 +337,33 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
         end
 
     elseif event == "PLAYER_LOGIN" then
-        -- 职业检测：只有死亡骑士才显示
+        -- 职业检测：根据职业 ID 选择追踪的技能
         local _, _, classID = UnitClass("player")
-        if classID ~= DK_CLASS_ID then
+        cfg = CLASS_CONFIG[classID]
+
+        if not cfg then
+            -- 不支持的职业：彻底隐藏，不再监听施法事件
             frame:Hide()
             self:UnregisterEvent("UNIT_SPELLCAST_SUCCEEDED")
-            -- print("|cFF888888[DK Grip Tracker]|r 当前角色非死亡骑士，插件已隐藏")
             return
         end
 
-        isDeathKnight = true
+        -- 应用当前职业配置
+        TRACKED_SPELL_ID = cfg.spellID
+        MAX_CHARGES      = cfg.maxCharges
+        CHARGE_COOLDOWN  = cfg.chargeCD
+        charges          = MAX_CHARGES
+
+        icon:SetTexture(cfg.iconTextureID)
         frame:Show()
 
-        -- 登录时同步游戏内真实充能状态
-        local function SyncCharges()
-            local currentCharges, maxCharges, cooldownStart, cooldownDuration, chargeModRate
-            if C_Spell and C_Spell.GetSpellCharges then
-                local info = C_Spell.GetSpellCharges(DEATH_GRIP_SPELL_ID)
-                if info then
-                    currentCharges    = info.currentCharges
-                    maxCharges        = info.maxCharges
-                    cooldownStart     = info.cooldownStartTime
-                    cooldownDuration  = info.cooldownDuration
-                    chargeModRate     = info.chargeModRate or 1
-                end
-            elseif GetSpellCharges then
-                currentCharges, maxCharges, cooldownStart, cooldownDuration, chargeModRate = GetSpellCharges(DEATH_GRIP_SPELL_ID)
-            end
-
-            if currentCharges then
-                charges = currentCharges
-                cdQueue = {}
-
-                if currentCharges < maxCharges and cooldownStart and cooldownStart > 0 and cooldownDuration and cooldownDuration > 0 then
-                    -- 有正在恢复的层数
-                    local expireTime = cooldownStart + cooldownDuration
-                    table.insert(cdQueue, expireTime)
-
-                    -- 如果缺少不止一层，后续层依次排列
-                    local missing = maxCharges - currentCharges
-                    for i = 2, missing do
-                        table.insert(cdQueue, expireTime + (i - 1) * CHARGE_COOLDOWN)
-                    end
-                end
-
-                ProcessCooldownQueue()
-                print("|cFF00FF00[DK Grip Tracker]|r 已加载 — 当前充能: " .. charges .. "/" .. MAX_CHARGES)
-            else
-                -- 可能不是 DK 或者该技能不存在
-                print("|cFFFF6600[DK Grip Tracker]|r 未检测到死亡之握技能（非DK或未学习该技能）")
-            end
-        end
-
-        -- 延迟一点确保技能信息可用
-        C_Timer.After(1, SyncCharges)
+        -- 延迟同步，确保技能信息可用
+        C_Timer.After(1, function() SyncCharges(false) end)
 
     elseif event == "UNIT_SPELLCAST_SUCCEEDED" then
-        local unit, castGUID, spellID = ...
-        if unit == "player" and spellID == DEATH_GRIP_SPELL_ID then
-            OnGripUsed()
+        local unit, _, spellID = ...
+        if unit == "player" and TRACKED_SPELL_ID and spellID == TRACKED_SPELL_ID then
+            OnSpellUsed()
         end
     end
 end)
@@ -336,7 +377,6 @@ SlashCmdList["DKGRIP"] = function(msg)
     msg = string.lower(string.trim(msg or ""))
 
     if msg == "reset" then
-        -- 重置位置
         frame:ClearAllPoints()
         frame:SetPoint("CENTER", UIParent, "CENTER", 0, -200)
         if db then
@@ -345,44 +385,32 @@ SlashCmdList["DKGRIP"] = function(msg)
             db.x        = 0
             db.y        = -200
         end
-        print("|cFF00FF00[DK Grip Tracker]|r 位置已重置")
+        PrintMsg("位置已重置")
 
     elseif msg == "sync" then
-        -- 手动同步游戏状态
-        local info
-        if C_Spell and C_Spell.GetSpellCharges then
-            info = C_Spell.GetSpellCharges(DEATH_GRIP_SPELL_ID)
+        if not cfg then
+            PrintMsg("|cFFFF6600当前职业不支持|r")
+            return
         end
-        if info then
-            charges = info.currentCharges
-            cdQueue = {}
-            if info.currentCharges < info.maxCharges and info.cooldownStartTime > 0 then
-                local expireTime = info.cooldownStartTime + info.cooldownDuration
-                table.insert(cdQueue, expireTime)
-                local missing = info.maxCharges - info.currentCharges
-                for i = 2, missing do
-                    table.insert(cdQueue, expireTime + (i - 1) * CHARGE_COOLDOWN)
-                end
-            end
-            ProcessCooldownQueue()
-            print("|cFF00FF00[DK Grip Tracker]|r 已同步 — 充能: " .. charges .. "/" .. MAX_CHARGES)
+        if SyncCharges(true) then
+            PrintMsg("已同步 — " .. cfg.spellName .. " 充能: " .. charges .. "/" .. MAX_CHARGES)
         else
-            print("|cFFFF6600[DK Grip Tracker]|r 同步失败，未检测到死亡之握")
+            PrintMsg("|cFFFF6600同步失败，未检测到 " .. cfg.spellName .. "|r")
         end
 
     elseif tonumber(msg) then
-        -- 设置图标大小
         local size = tonumber(msg)
         if size >= 20 and size <= 100 then
             frame:SetSize(size, size)
             if db then db.iconSize = size end
-            print("|cFF00FF00[DK Grip Tracker]|r 图标大小设置为 " .. size)
+            PrintMsg("图标大小设置为 " .. size)
         else
-            print("|cFFFF6600[DK Grip Tracker]|r 大小范围: 20-100")
+            PrintMsg("|cFFFF6600大小范围: 20-100|r")
         end
 
     else
-        print("|cFF00FF00[DK Grip Tracker]|r 命令:")
+        local skillLabel = cfg and cfg.spellName or "未启用（当前职业不支持）"
+        PrintMsg("命令（当前追踪: " .. skillLabel .. "）:")
         print("  /dkgrip        — 显示帮助")
         print("  /dkgrip reset  — 重置位置到屏幕中央")
         print("  /dkgrip sync   — 同步游戏充能状态")
